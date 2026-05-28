@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `docs/vendors/nvidia-rtx50-blackwell.md`: updated 2026-05-28 with Windows 11 (24H2)
+  confirmation. Tested Matrix gains a Windows row (NVIDIA Game Ready Driver, `rombar=0`
+  confirmed, `x-vga=1` not required). New §Windows 11 Guest VM config section with
+  Looking Glass / anti-cheat CPU args (`kvm=off`, `hv_vendor_id=GenuineIntel`),
+  `vga:virtio` vs `vga:none` rationale, TPM 2.0 note. New §Guest Driver Install —
+  Windows 11. Known Limitations: Windows row promoted ❓ Untested → ✅ Confirmed.
+  Gotcha 5: `rombar=0` confirmed for Windows. Architecture diagram last line updated
+  to "Guest NVIDIA driver" (covers both Linux and Windows).
 - `docs/vendors/nvidia-rtx50-blackwell.md`: full recipe for NVIDIA GeForce RTX 5070
   (Blackwell GB205) passthrough on Proxmox VE 9.2.x / kernel 7.0.x. Documents the
   FSP WPR2 pre-arm root cause (`0xbadf4100` sentinel), the 4-phase `nvidia-to-vfio.sh`

@@ -1,8 +1,8 @@
 # NVIDIA RTX 50-series (Blackwell) — Full Recipe
 
-> 🚧 **Status**: Under validation (first confirmed 2026-05-28 on NVIDIA GeForce RTX 5070 GB205,
-> Proxmox VE 9.2.2 kernel 7.0.2-6-pve, Ubuntu 26.04, NVIDIA driver 595.71.05).
-> Promoting to ✅ after ≥2-week production uptime.
+> 🚧 **Status**: Under validation. Confirmed 2026-05-28 on NVIDIA GeForce RTX 5070 GB205,
+> Proxmox VE 9.2.2 kernel 7.0.2-6-pve — both Linux (Ubuntu 26.04, nvidia-driver 595.71.05)
+> and Windows 11 guests (NVIDIA Game Ready Driver). Promoting to ✅ after ≥2-week production uptime.
 
 ## TL;DR
 
@@ -21,6 +21,7 @@ PERST# and WPR2 stays 0 across VM stop/start cycles.
 | Host | Guest | Driver | Result |
 |------|-------|--------|--------|
 | Proxmox VE 9.2.2, kernel 7.0.2-6-pve (Debian 13 Trixie) | Ubuntu 26.04 LTS | nvidia-driver-595-server-open (595.71.05) | ✅ `nvidia-smi` OK, CUDA 13.2, 12 227 MiB VRAM |
+| Proxmox VE 9.2.2, kernel 7.0.2-6-pve (Debian 13 Trixie) | Windows 11 (24H2) | NVIDIA Game Ready Driver (standard) | ✅ GPU visible in Device Manager, no error code. `rombar=0` confirmed; `x-vga=1` not required |
 
 ## Failure Modes This Recipe Prevents
 
@@ -55,7 +56,7 @@ Host: vfio-pci binds GPU (WPR2 = 0)
      (NOT SBR)                          is in a separate IOMMU group, not in the
                                         VFIO container
   └─ FLR does NOT assert PERST#     ← WPR2 stays 0
-  └─ Guest nvidia-open loads → GSP cold-boots cleanly → nvidia-smi OK
+  └─ Guest NVIDIA driver loads → GSP cold-boots cleanly → GPU operational
 ```
 
 Reset type comparison:
@@ -85,7 +86,7 @@ lspci -nn | grep -i nvidia
 Common RTX 50-series IDs (check your card — IDs vary within a SKU family):
 
 | Card | GPU ID | Audio companion ID |
-|------|--------|-----------------------|
+|------|--------|--------------------|
 | RTX 5070 | `10de:2f04` | `10de:2f80` |
 | RTX 5080 | check `lspci` | check `lspci` |
 | RTX 5090 | check `lspci` | check `lspci` |
@@ -124,7 +125,7 @@ GRUB_CMDLINE_LINUX_DEFAULT="... intel_iommu=on iommu=pt \
 ```
 
 | Parameter | Purpose |
-|-----------|---------|
+|-----------|-------|
 | `intel_iommu=on` | Enable Intel VT-d IOMMU (use `amd_iommu=on` for AMD) |
 | `iommu=pt` | Pass-through mode: avoids DMA translation overhead for non-IOMMU devices |
 | `pcie_acs_override=downstream,multifunction` | Split multifunction PCIe devices into separate IOMMU groups |
@@ -376,7 +377,7 @@ virtio0: local-lvm:vm-100-disk-1,cache=writeback,iothread=1,size=20G
 ### VM Config Rationale
 
 | Setting | Value | Reason |
-|---------|-------|--------|
+|---------|-------|-------|
 | `hostpci0` | `0000:03:00.0,pcie=1,rombar=0` | GPU function only — prevents SBR; `pcie=1` = PCIe native mode; `rombar=0` = no VBIOS ROM BAR (Linux guest uses firmware from driver package) |
 | `bios` | `ovmf` | UEFI required — SeaBIOS does not enumerate PCIe capabilities correctly for NVIDIA passthrough |
 | `machine` | `q35` | Required for `pcie=1` — Q35 provides PCIe topology |
@@ -384,6 +385,45 @@ virtio0: local-lvm:vm-100-disk-1,cache=writeback,iothread=1,size=20G
 | `vga` | `none` | Disable emulated VGA framebuffer — avoids init conflicts with passthrough GPU |
 | `balloon` | `0` | Disable memory ballooning — NVIDIA driver pins GPU DMA pages; balloon driver conflicts |
 | `onboot` | `1` | Autostart after `nvidia-to-vfio.service` completes (enforced by `Before=pve-guests.service`) |
+
+### Windows 11 Guest — Looking Glass / Gaming Config
+
+The same `hostpci0` line works unchanged for Windows 11. Key differences from the Linux config:
+
+```
+# Windows 11 passthrough — key lines (sanitized qm config output)
+bios: ovmf
+machine: pc-q35-11.0
+ostype: win11
+cpu: host,hidden=1,flags=-hv-evmcs;-hv-tlbflush;+pcid
+hostpci0: 0000:03:00.0,pcie=1,rombar=0
+vga: virtio
+tpmstate0: local-lvm:vm-XXX-disk-0,size=4M,version=v2.0
+```
+
+| Setting | Windows-specific note |
+|---------|----------------------|
+| `hostpci0` | **Identical** to Linux — same `rombar=0`, no `x-vga=1` needed |
+| `vga: virtio` | Use `virtio` (not `none`) when Looking Glass is in the guest — Windows needs a primary display for the desktop session |
+| `ostype: win11` | Activates Windows-specific QEMU settings |
+| `tpmstate0` | TPM 2.0 required by Windows 11 — swtpm auto-configured by Proxmox |
+| `cpu: hidden=1` | Hides KVM hypervisor from guest — required for some anti-cheat systems (Valorant, Easy Anti-Cheat) |
+
+**Anti-cheat CPU args** (add to `args` if needed for Valorant/EAC):
+```
+-cpu host,kvm=off,hv_vendor_id=GenuineIntel,hv_relaxed=off,hv_vapic=off,hv_time=off,hv_crash=off,hv_reset=off,hv_vpindex=off,hv_runtime=off,hv_synic=off,hv_stimer=off,hv_tlbflush=off,hv_evmcs=off
+```
+This completely disables Hyper-V enlightenments and masks KVM. Not needed for the passthrough to work — only for games that ban on detected virtualization.
+
+**Looking Glass** (optional — host-to-guest low-latency display capture):
+```
+# Add to args:
+-device ivshmem-plain,memdev=ivshmem,bus=pcie.0
+-object memory-backend-file,id=ivshmem,share=on,mem-path=/dev/shm/looking-glass,size=128M
+-device virtio-mouse-pci
+-device virtio-keyboard-pci
+```
+See [Looking Glass documentation](https://looking-glass.io/docs/stable/) for the host client and guest IVSHMEM driver.
 
 ### Why Audio (`00.1`) is Intentionally Excluded
 
@@ -403,12 +443,35 @@ USB audio passthrough, or QEMU's built-in AC'97/HDA emulation (`-soundhw hda`).
 
 ---
 
-## Guest Driver Install (Linux)
+## Guest Driver Install
 
-### Ubuntu 24.04 / 26.04
+### Windows 11
+
+Install the standard **NVIDIA Game Ready Driver** or **Studio Driver** from
+[nvidia.com/drivers](https://www.nvidia.com/drivers). The open-source `nvidia-open` modules
+are Linux-only; Windows uses the standard Windows driver package.
+
+```
+# Windows — not a command, just a note:
+# Download: https://www.nvidia.com/drivers  (Game Ready or Studio, GeForce RTX 5070)
+# Install normally — no special flags needed
+# Reboot when prompted
+```
+
+Verify in **Device Manager → Display adapters**: "NVIDIA GeForce RTX 5070" should appear with
+no yellow warning triangle (code 43 or similar). If you see Code 43, check:
+1. `rombar=0` is set in the VM config (already the recommended value)
+2. The handoff service ran successfully at host boot:
+   `journalctl -u nvidia-to-vfio.service` should show `Handoff complete`
+
+> **Note**: `x-vga=1` is **not** required for Windows with RTX 50-series — confirmed working
+> without it. `rombar=0` also works for Windows (standard VBIOS is not needed; the driver
+> uses its own firmware).
+
+### Linux — Ubuntu 24.04 / 26.04
 
 ```bash
-# Inside the VM
+# Inside the Ubuntu VM
 sudo apt update
 sudo ubuntu-drivers install --gpgpu
 # Or explicitly (replace 595 with available version):
@@ -430,7 +493,7 @@ Expected output:
 +-----------------------------------------+------------------------+----------------------+
 ```
 
-### Why Open Modules Are Required in the Guest Too
+### Why Open Modules Are Required in the Linux Guest
 
 ```
 # dmesg with closed nvidia.ko in guest:
@@ -523,8 +586,9 @@ Use `lspci -vv -s 0000:03:00.0` for capability inspection instead of `/dev/mem`.
 
 Linux guests using nvidia-open do not read the VBIOS ROM BAR — GSP firmware comes from the
 driver package (`/lib/firmware/nvidia/`). `rombar=0` avoids mapping an unnecessary BAR and
-prevents spurious ROM BAR enable cycles that can confuse the GPU at init. Windows guests
-may require `rombar=1` (untested for Blackwell).
+prevents spurious ROM BAR enable cycles that can confuse the GPU at init. **Windows guests
+also work with `rombar=0` — confirmed with RTX 5070 + Windows 11 + standard NVIDIA Game
+Ready Driver.** `rombar=1` is not needed for either Linux or Windows on Blackwell.
 
 ### Gotcha 6 — WPR2 Register Reference (Diagnostic, Read-Only)
 
@@ -557,7 +621,7 @@ nvidia-smi --query-gpu=name,driver_version,memory.total,temperature.gpu \
 | Driver Version | 595.71.05 or newer |
 | CUDA Version | 13.2 |
 | Total VRAM | 12 227 MiB |
-| Open modules required | Yes (host and guest) |
+| Open modules required | Yes (host and Linux guest — Windows uses standard driver) |
 | WPR2 state at VM start | 0 (cleared via GSP full init — confirmed across multiple reboots) |
 
 ---
@@ -568,7 +632,7 @@ nvidia-smi --query-gpu=name,driver_version,memory.total,temperature.gpu \
 |---------|--------|-------|
 | HD Audio companion (`00.1`) in VM | ❌ Excluded by design | Required for FLR workaround — see §Why Audio is Excluded |
 | VM stop/start without host reboot | ✅ Supported | FLR keeps WPR2 = 0 across cycles |
-| Windows guest | ❓ Untested | Should work; may require `rombar=1`, `x-vga=1` — not validated |
+| Windows guest | ✅ Confirmed | Works with `rombar=0` (no `rombar=1` needed), no `x-vga=1` required. Anti-cheat: add `kvm=off,hv_vendor_id=GenuineIntel` in CPU args. Looking Glass supported. |
 | D3cold recovery after host crash | ❌ Not available on most platforms | PCIe power gating unsupported in standard slots; requires PSU-off cycle |
 | `vendor-reset` module | Not needed | FLR path prevents the reset bug entirely |
 
@@ -578,9 +642,9 @@ nvidia-smi --query-gpu=name,driver_version,memory.total,temperature.gpu \
 
 | Tried | Outcome |
 |-------|--------|
-| `kvm=off` / `-hypervisor` CPUID flags | Not needed for Linux guest / Blackwell |
+| `kvm=off` / `-hypervisor` CPUID flags | Not needed for the passthrough to work. Useful for Windows gaming VMs to bypass anti-cheat detection (Valorant, EAC) — not a passthrough requirement |
 | `vendor-reset` DKMS module | Not needed — FLR path prevents the reset bug |
-| `romfile=<vbios.bin>` | Not needed for Linux guest |
+| `romfile=<vbios.bin>` | Not needed for Linux or Windows guest |
 | `ids=10de:2f04,10de:2f80` in `vfio.conf` | Actively harmful — blocks handoff script from loading nvidia |
 | Passing both `00.0` + `00.1` to VM | Enables SBR path → PERST# → WPR2 re-armed → `RmInitAdapter` fails |
 | `pci=noaer` | Reduces log noise but not required for functionality |
