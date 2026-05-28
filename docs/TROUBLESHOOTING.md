@@ -50,7 +50,46 @@ Typically **AMD Reset Bug**. The GPU was left in an unreclaimable state after th
 | AMD Polaris (RX 4xx/5xx) | Install [vendor-reset](https://github.com/gnif/vendor-reset) kernel module |
 | AMD Navi (RX 5xxx) | Install `vendor-reset` (Navi-specific reset sequence) |
 | AMD RDNA 2+ (RX 6xxx/7xxx) | Usually better behaved, but `vendor-reset` still recommended |
-| Intel / NVIDIA | Not a Reset Bug — check dmesg for specific error |
+| Intel / NVIDIA | Not a Reset Bug — check dmesg for specific error (see WPR2 section below for Blackwell) |
+
+## NVIDIA Blackwell: "GPU Failed to Initialize" on Second VM Start (WPR2 Reset Bug)
+
+**Symptom**: VM starts cleanly the first time. After VM shutdown and restart, the GPU fails to initialize. `dmesg` in the guest shows errors during `nvidia.ko` load; the guest sees the GPU but NVIDIA driver can't bring it up. `nvidia-smi` returns `Failed to initialize NVML: Driver/library version mismatch` or hangs. The Proxmox host is not hung — only the passthrough GPU is unrecoverable without a host reboot.
+
+**Root cause**: NVIDIA Blackwell GPUs use a **GSP (GPU System Processor)** firmware that maintains a **Write-Protected Region 2 (WPR2)**. When the VM shuts down, the GSP firmware does not fully reset — its WPR2 state persists in the GPU's on-chip SRAM across PCIe FLR (Function Level Reset). The next VM boot sees the GPU with leftover firmware state and can't re-initialize from scratch.
+
+This is distinct from the AMD Reset Bug (different mechanism, different fix):
+
+| Aspect | AMD Reset Bug | NVIDIA Blackwell WPR2 Bug |
+|--------|--------------|--------------------------|
+| Trigger | GPU left in bad state after any VM exit | GSP firmware WPR2 persists through PCIe FLR |
+| Host hangs? | Yes — host often deadlocks | No — host is fine, only GPU unusable |
+| PCIe FLR fix? | Sometimes | No — FLR is insufficient |
+| D3cold (power-cycle via PCIe) | Not always supported | Not supported on most desktop platforms |
+| Fix | `vendor-reset` kernel module | Full host reboot (short-term); `vendor-reset` Blackwell support (long-term — check [gnif/vendor-reset](https://github.com/gnif/vendor-reset) issues for Blackwell status) |
+
+**Short-term fix** (confirmed working):
+
+```bash
+# From the Proxmox host — issue a full reboot
+# (A VM stop/start cycle is NOT enough; the GPU needs power-cycle via host reboot)
+ssh proxmox-host "nohup reboot &"
+```
+
+After the host reboots, the GPU resets cleanly and the VM starts normally again.
+
+**Long-term fix**: Install [gnif/vendor-reset](https://github.com/gnif/vendor-reset) as a DKMS module on the Proxmox host. `vendor-reset` implements GPU-family-specific reset sequences that go beyond PCIe FLR. Check the issue tracker for Blackwell (GB2xx/GB3xx) support status — Ada Lovelace support is available, Blackwell may require a newer version.
+
+```bash
+# On Proxmox host:
+apt install dkms git
+git clone https://github.com/gnif/vendor-reset.git
+cd vendor-reset && dkms install .
+modprobe vendor_reset
+# Verify: dmesg | grep vendor_reset
+```
+
+The Proxmox `reset-method` hookscript (`hookscripts/reset-method.sh` in this repo) plugs into vendor-reset automatically if the module is present.
 
 ## Wrong VRAM Reported
 
@@ -94,6 +133,47 @@ If fans stay full after driver loads:
 - **NVIDIA**: driver fan curve might not apply; check GPU-Z / nvidia-smi for temperature
 - **Intel Arc**: known issue on some boards with BIOS-side fan control conflicting with driver; usually resolves after one VM reboot
 - **AMD**: check for `vendor-reset` leaving GPU in weird state
+
+## nvidia-smi Reports "No devices found" (Linux Guest — Blackwell / Ada)
+
+**Symptom**: `nvidia-smi` returns `No devices found` or `No devices were found`. The NVIDIA kernel module *is* loaded (`lsmod | grep nvidia` shows `nvidia`, `nvidia_uvm`, etc.), and `lspci` shows the GPU. `dmesg` contains:
+
+```
+NVRM: The NVIDIA GPU 0000:XX:00.0 (PCI ID: 10de:XXXX)
+NVRM: installed in this system requires use of the NVIDIA open kernel modules.
+NVRM: GPU 0000:XX:00.0: RmInitAdapter failed! (0x22:0x56:1017)
+NVRM: GPU 0000:XX:00.0: rm_init_adapter failed, device minor number 0
+```
+
+**Root cause**: Blackwell (GB2xx/GB3xx) and Ada Lovelace GPUs require NVIDIA's open-source kernel modules. The proprietary closed-source `nvidia.ko` does not support these architectures. The standard `nvidia-driver-XXX-server` (or `nvidia-driver-XXX`) package installs the closed module.
+
+**Fix**:
+
+```bash
+# Ubuntu 24.04 — swap closed for open kernel module package
+sudo apt install nvidia-driver-595-server-open
+# apt automatically removes nvidia-driver-595-server and rebuilds via DKMS
+
+# Hot-reload without VM reboot:
+sudo modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia
+sudo modprobe nvidia
+# Verify:
+nvidia-smi
+```
+
+Replace `595` with your installed driver version. The open package variant is named `nvidia-driver-<VERSION>-open` (desktop) or `nvidia-driver-<VERSION>-server-open` (server/headless).
+
+**Affected architectures**: All Blackwell (GB1xx/GB2xx/GB3xx) and Ada Lovelace (AD1xx) GPUs. Turing (TU1xx) and Ampere (GA1xx) still work with either open or closed modules.
+
+**Live VFIO bind note**: If you update `vfio.conf` with new device IDs but don't reboot, the running `vfio-pci` kernel module instance doesn't know the new IDs. `echo <BDF> > /sys/bus/pci/drivers/vfio-pci/bind` will fail with `No such device`. Use `new_id` instead:
+
+```bash
+echo "10de 2c31" > /sys/bus/pci/drivers/vfio-pci/new_id   # RTX PRO 4500 GPU
+echo "10de 22e9" > /sys/bus/pci/drivers/vfio-pci/new_id   # RTX PRO 4500 Audio
+# The driver claims the devices automatically after new_id
+```
+
+---
 
 ## Still Stuck?
 
