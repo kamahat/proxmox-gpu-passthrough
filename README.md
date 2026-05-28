@@ -13,13 +13,14 @@ Battle-tested PCIe passthrough recipes for Proxmox VE — with focus on **the fa
 ## Supported GPUs
 
 | GPU | Vendor | Status | Proven On |
-|-----|--------|--------|-----------|
+|-----|--------|--------|----------|
 | **Intel Arc A310 (DG2)** | Intel | ✅ Production | Proxmox VE 9.1, kernel 6.17.x, Windows 11 Pro 25H2 — promoted 2026-05-15 (≥2-week uptime confirmed) |
 | **NVIDIA RTX 2000 Ada** | NVIDIA Professional (Ada) | 🚧 In validation | Proxmox VE 9.1.1, kernel 6.17.2-1-pve, Ubuntu 24.04 guest — initial config verified 2026-05-11 |
 | **NVIDIA RTX PRO 4500 Blackwell (32 GB)** | NVIDIA Professional (Blackwell) | 🚧 In validation | Proxmox VE 9.1.1, kernel 6.17.2-1-pve, Ubuntu 24.04 guest — initial config verified 2026-05-15 |
+| **NVIDIA GeForce RTX 5070 (Blackwell GB205)** | NVIDIA Consumer (Blackwell) | 🚧 In validation | Proxmox VE 9.2.2, kernel 7.0.2-6-pve, Ubuntu 26.04 guest — first confirmed 2026-05-28 |
 | **AMD (Polaris/Navi)** | AMD | 📋 Backlog (Reset Bug Research) | — |
 
-> **NVIDIA Consumer (GeForce RTX 40 / 50-series)** intentionally not in the planned set. Consumer-tier passthrough is already represented by the **Intel Arc A310** entry above — it shows the harder failure modes (Code-43, CPUID hiding, INF gotcha) on a Consumer-class card. A separate NVIDIA-Consumer recipe is welcome from contributors with real ≥2-week production passthrough on Ada / Blackwell GeForce hardware — see [docs/vendors/nvidia-consumer.md](docs/vendors/nvidia-consumer.md).
+> **NVIDIA Consumer (GeForce)** first contribution: RTX 5070 (Blackwell GB205), recipe added 2026-05-28 (🚧 in validation — see table). Full recipe: [docs/vendors/nvidia-rtx50-blackwell.md](docs/vendors/nvidia-rtx50-blackwell.md). Additional Consumer-tier recipes welcome from contributors with real ≥2-week production passthrough — see [docs/vendors/nvidia-consumer.md](docs/vendors/nvidia-consumer.md).
 
 > **Scope discipline**: Every "Production" entry in this table has been running for ≥2 weeks in a real workload (not just `dxdiag`). "In validation" entries have a working first-boot config but haven't cleared the two-week threshold yet. Entries promote to ✅ **only** after that threshold — including my own.
 
@@ -28,6 +29,7 @@ Battle-tested PCIe passthrough recipes for Proxmox VE — with focus on **the fa
 - **Intel Arc A310** — ✅ promoted to Production 2026-05-15 (≥2-week uptime confirmed).
 - **NVIDIA RTX 2000 Ada** — 🚧 in validation since 2026-05-11. ML-inference workload running (PaddleOCR GPU). Flag-set confirmed minimal (no hypervisor-hiding). Full recipe after ≥2-week threshold (2026-05-25).
 - **NVIDIA RTX PRO 4500 Blackwell (32 GB GDDR7)** — 🚧 in validation since 2026-05-15, same workstation as RTX 2000 Ada. Ollama VLM workload running. Key open finding: WPR2 reset bug (host reboot required after VM stop — `vendor-reset` Blackwell support TBD). ReBAR on full 32 GB BAR and PCIe 5.0 link training not yet verified under load. Full recipe after ≥2-week threshold (2026-05-29).
+- **NVIDIA GeForce RTX 5070 (Blackwell GB205)** — 🚧 in validation since 2026-05-28. Root cause (FSP WPR2 pre-arm) identified and solved: `nvidia-to-vfio.sh` handoff service clears WPR2 via full GSP init on every host boot; FLR workaround (audio `00.1` excluded from VM) prevents re-arm across VM stop/start cycles. Confirmed: `nvidia-smi` OK, CUDA 13.2, 12 227 MiB VRAM. Promotes to ✅ after ≥2-week threshold (2026-06-11).
 - **AMD (Polaris / Navi / RDNA)** — backlog; contingent on test hardware access and on `vendor-reset` kernel module compatibility with current kernels.
 
 ## Features
@@ -88,9 +90,10 @@ powershell.exe -File capability-probe.ps1
 | [docs/RESOURCE_MAPPINGS.md](docs/RESOURCE_MAPPINGS.md) | Cluster-aware passthrough via logical mapping names (Proxmox VE 8+); required for HA with passthrough |
 | [docs/vendors/intel-arc-dg2.md](docs/vendors/intel-arc-dg2.md) | ✅ Intel Arc A310 full recipe (Code-43-fix, INF gotcha) — production |
 | [docs/vendors/nvidia-professional.md](docs/vendors/nvidia-professional.md) | 🚧 RTX 2000 Ada + RTX PRO 4500 Blackwell — in validation (two Pro cards, same VM, dual-GPU confirmed) |
+| [docs/vendors/nvidia-rtx50-blackwell.md](docs/vendors/nvidia-rtx50-blackwell.md) | 🚧 NVIDIA GeForce RTX 5070 Blackwell — host handoff service, WPR2 pre-arm fix, HPE DL380 Gen10 Plus appendix |
 | [docs/vendors/amd.md](docs/vendors/amd.md) | 📋 Reset Bug + `vendor-reset` kernel module — backlog |
 
-> The Consumer-tier perspective is covered by the **Intel Arc A310** entry. A NVIDIA-GeForce-specific stub for contributors lives at [docs/vendors/nvidia-consumer.md](docs/vendors/nvidia-consumer.md).
+> The Consumer-tier perspective is also covered by the **Intel Arc A310** entry. A NVIDIA-GeForce-specific stub for contributors lives at [docs/vendors/nvidia-consumer.md](docs/vendors/nvidia-consumer.md).
 
 ## The Things Most Guides Miss
 
@@ -98,7 +101,7 @@ For **Intel Arc**: `kvm=off` alone is not enough. The Windows driver checks CPUI
 
 For **NVIDIA Blackwell / Ada Lovelace**: `nvidia-driver-XXX-server` (the standard package) silently fails with `RmInitAdapter (0x22:0x56:1017)`. These architectures require the **open kernel module** variant (`nvidia-driver-XXX-server-open`). `nvidia-smi` reports "No devices found" even with the module loaded — which looks exactly like a VFIO binding problem, sending you down the wrong debug path. See [docs/TROUBLESHOOTING.md § nvidia-smi Reports "No devices found"](docs/TROUBLESHOOTING.md#nvidia-smi-reports-no-devices-found-linux-guest--blackwell--ada).
 
-For **NVIDIA Blackwell specifically**: the GPU does not survive a VM stop/start cycle without a full host reboot. PCIe FLR is insufficient to reset the GSP firmware's WPR2 state. This hits you on the second VM boot, not the first — so first-boot success is a false signal. See [docs/TROUBLESHOOTING.md § WPR2 Reset Bug](docs/TROUBLESHOOTING.md#nvidia-blackwell-gpu-failed-to-initialize-on-second-vm-start-wpr2-reset-bug).
+For **NVIDIA Blackwell specifically**: without a host-side handoff service, the GPU does not survive a VM stop/start cycle without a full host reboot. The FSP (Falcon Security Processor) pre-arms WPR2 with sentinel `0xbadf4100` at every PERST# assertion — the guest driver cannot cold-boot from this invalid state. This hits you on the second VM boot, not the first — so first-boot success is a false signal. **The GeForce RTX 5070 (GB205) recipe solves this**: a host `nvidia-to-vfio.sh` handoff service clears WPR2 via full GSP init on every boot, and passing only the GPU function (`00.0`, not audio `00.1`) to the VM forces FLR instead of SBR — WPR2 stays 0 across stop/start cycles. See [docs/vendors/nvidia-rtx50-blackwell.md](docs/vendors/nvidia-rtx50-blackwell.md). For WPR2 root-cause theory and Pro cards, see [docs/TROUBLESHOOTING.md § WPR2 Reset Bug](docs/TROUBLESHOOTING.md#nvidia-blackwell-gpu-failed-to-initialize-on-second-vm-start-wpr2-reset-bug).
 
 ## Prerequisites
 
@@ -118,6 +121,7 @@ Honesty about what's battle-tested and what's codified:
 - **Bash scripts in `scripts/`** codify standard VFIO + Proxmox-documentation patterns. They are **not** extracted from the ad-hoc production session that validated the Intel Arc recipe. On the actual host the initial binding was done with one-liners (`echo "0000:03:00.0" > /sys/bus/pci/drivers/vfio-pci/bind` etc.); the scripts exist to make that flow reproducible across setups.
 - **`scripts/capability-probe.ps1`** is a clean-room re-composition of three forensic PowerShell scripts used during the 2026-04-20 validation session (`probe.ps1`, `verify.ps1`, `dxgi_vram.ps1`). Those forensic scripts don't ship with the repo; the relevant logic was extracted and generalized.
 - **The Intel Arc recipe text** ([docs/vendors/intel-arc-dg2.md](docs/vendors/intel-arc-dg2.md)) — symptoms, fix sequence, DxgKrnl event IDs, dead-end attempts — is the direct output of that session. First-hand observations, not a literature review.
+- **The RTX 5070 Blackwell recipe** ([docs/vendors/nvidia-rtx50-blackwell.md](docs/vendors/nvidia-rtx50-blackwell.md)) — FSP WPR2 pre-arm root cause, handoff script, FLR workaround — is contributed from a validated production setup on HPE ProLiant DL380 Gen10 Plus (Proxmox VE 9.2.2, kernel 7.0.2-6-pve).
 
 In short: the **recipe is battle-tested**, the **wrapper scripts are standards-based**. Both together are what makes this repo useful; neither is the other.
 
