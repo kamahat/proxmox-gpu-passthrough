@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `docs/vendors/nvidia-rtx50-blackwell.md`: updated 2026-05-28 with Windows 11 (24H2)
+  confirmation. Tested Matrix gains a Windows row (NVIDIA Game Ready Driver, `rombar=0`
+  confirmed, `x-vga=1` not required). New §Windows 11 Guest VM config section with
+  Looking Glass / anti-cheat CPU args (`kvm=off`, `hv_vendor_id=GenuineIntel`),
+  `vga:virtio` vs `vga:none` rationale, TPM 2.0 note. New §Guest Driver Install —
+  Windows 11. Known Limitations: Windows row promoted ❓ Untested → ✅ Confirmed.
+  Gotcha 5: `rombar=0` confirmed for Windows. Architecture diagram last line updated
+  to "Guest NVIDIA driver" (covers both Linux and Windows).
+- `docs/vendors/nvidia-rtx50-blackwell.md`: full recipe for NVIDIA GeForce RTX 5070
+  (Blackwell GB205) passthrough on Proxmox VE 9.2.x / kernel 7.0.x. Documents the
+  FSP WPR2 pre-arm root cause (`0xbadf4100` sentinel), the 4-phase `nvidia-to-vfio.sh`
+  host handoff service (nvidia-open bind → GSP lazy init via `mknod` +
+  `open(/dev/nvidia0)` → `rmmod` WPR2-clear → vfio-pci bind), the FLR workaround
+  (audio `00.1` excluded from VM to block SBR), and an appendix for HPE ProLiant
+  DL380 Gen10 Plus (iLO Redfish BIOS settings, extended GRUB cmdline).
+  Status: 🚧 in validation — first confirmed 2026-05-28, promotes to ✅ 2026-06-11.
+- `examples/nvidia-rtx50-blackwell/nvidia-to-vfio.sh`: production-ready handoff script
+  (shellcheck ✅ exit 0, `set -uo pipefail`). Prerequisite checks, 4 phases with
+  per-phase logging to `/var/log/nvidia-to-vfio.log`. GSP lazy-init via `mknod` +
+  Python3 heredoc; graceful fallback to BIOS WPR2 path if `/dev/nvidia0` open fails.
+- `examples/nvidia-rtx50-blackwell/vm-config.example.conf`: sanitized `qm config`
+  output. Key line: `hostpci0: 0000:03:00.0,pcie=1,rombar=0` — GPU `00.0` only,
+  audio `00.1` excluded, which is what forces FLR over SBR.
+- `README.md`: RTX 5070 (Blackwell GB205) added to Supported GPUs table and Roadmap;
+  Documentation table updated; Consumer note updated; Blackwell paragraph in
+  "Things Most Guides Miss" updated with fix reference.
+
 ### Planned
 - Extend `collect-diagnostics.sh` sanitizer to mask IPv4/IPv6, hardware/BIOS UUIDs, and usernames in paths — once enough real-world diag bundles surface the common patterns.
 - NVIDIA RTX 2000 Ada + RTX PRO 4500 Blackwell recipes (two Pro cards, same workstation, ML-inference workload — promote to ✅ after each clears its own ≥2-week threshold).
