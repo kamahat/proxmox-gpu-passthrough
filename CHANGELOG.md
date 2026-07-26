@@ -12,8 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NVIDIA RTX 2000 Ada + RTX PRO 4500 Blackwell recipes (two Pro cards, same workstation, ML-inference workload — promote to ✅ after each clears its own ≥2-week threshold).
 - `vendor-reset` installation guide for Blackwell WPR2 reset bug — once Blackwell support in `gnif/vendor-reset` is confirmed.
 
+## [1.2.1] — 2026-07-26
+
 ### Changed
 - Intel Arc A310: promoted from 🚧 In validation → ✅ Production (2026-05-15 — ≥2-week uptime confirmed). Status updated in `README.md`, `docs/vendors/intel-arc-dg2.md`, and documentation table.
+- `README.md` roadmap: both NVIDIA entries moved from "planned" to in-validation with the actual workloads (PaddleOCR GPU on RTX 2000 Ada, Ollama VLM on RTX PRO 4500 Blackwell), open items (WPR2 reset, ReBAR on the full 32 GB BAR, PCIe 5.0 link training) and target promotion dates.
+- `README.md` documentation table: `nvidia-professional` "planned" → "in validation, dual-GPU confirmed"; `intel-arc-dg2` 🚧 → ✅; TROUBLESHOOTING scope line extended by WPR2 reset and the open-module requirement.
+- `README.md` "The One Thing Most Guides Miss" → "The Things Most Guides Miss": added the NVIDIA Blackwell/Ada open-module finding and the WPR2 reset bug alongside the existing Intel Arc entry.
 
 ## [1.2.0] — 2026-05-15
 
