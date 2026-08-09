@@ -15,8 +15,8 @@ Battle-tested PCIe passthrough recipes for Proxmox VE — with focus on **the fa
 | GPU | Vendor | Status | Proven On |
 |-----|--------|--------|-----------|
 | **Intel Arc A310 (DG2)** | Intel | ✅ Production | Proxmox VE 9.1, kernel 6.17.x, Windows 11 Pro 25H2 — promoted 2026-05-15 (≥2-week uptime confirmed) |
-| **NVIDIA RTX 2000 Ada** | NVIDIA Professional (Ada) | 🚧 In validation | Proxmox VE 9.1.1, kernel 6.17.2-1-pve, Ubuntu 24.04 guest — initial config verified 2026-05-11 |
-| **NVIDIA RTX PRO 4500 Blackwell (32 GB)** | NVIDIA Professional (Blackwell) | 🚧 In validation | Proxmox VE 9.1.1, kernel 6.17.2-1-pve, Ubuntu 24.04 guest — initial config verified 2026-05-15 |
+| **NVIDIA RTX 2000 Ada** | NVIDIA Professional (Ada) | ✅ Production | Proxmox VE 9.1.1, kernel 6.17.2-1-pve, Ubuntu 24.04 guest — in production since 2026-05-11 (PaddleOCR GPU inference), promoted 2026-08-09 |
+| **NVIDIA RTX PRO 4500 Blackwell (32 GB)** | NVIDIA Professional (Blackwell) | ✅ Production | Proxmox VE 9.1.1, kernel 6.17.2-1-pve, Ubuntu 24.04 guest — in production since 2026-05-15 (Ollama VLM inference), promoted 2026-08-09; WPR2 reset bug remains open |
 | **AMD (Polaris/Navi)** | AMD | 📋 Backlog (Reset Bug Research) | — |
 
 > **NVIDIA Consumer (GeForce RTX 40 / 50-series)** intentionally not in the planned set. Consumer-tier passthrough is already represented by the **Intel Arc A310** entry above — it shows the harder failure modes (Code-43, CPUID hiding, INF gotcha) on a Consumer-class card. A separate NVIDIA-Consumer recipe is welcome from contributors with real ≥2-week production passthrough on Ada / Blackwell GeForce hardware — see [docs/vendors/nvidia-consumer.md](docs/vendors/nvidia-consumer.md).
@@ -26,8 +26,8 @@ Battle-tested PCIe passthrough recipes for Proxmox VE — with focus on **the fa
 ## Roadmap
 
 - **Intel Arc A310** — ✅ promoted to Production 2026-05-15 (≥2-week uptime confirmed).
-- **NVIDIA RTX 2000 Ada** — 🚧 in validation since 2026-05-11. ML-inference workload running (PaddleOCR GPU). Flag-set confirmed minimal (no hypervisor-hiding). Full recipe after ≥2-week threshold (2026-05-25).
-- **NVIDIA RTX PRO 4500 Blackwell (32 GB GDDR7)** — 🚧 in validation since 2026-05-15, same workstation as RTX 2000 Ada. Ollama VLM workload running. Key open finding: WPR2 reset bug (host reboot required after VM stop — `vendor-reset` Blackwell support TBD). ReBAR on full 32 GB BAR and PCIe 5.0 link training not yet verified under load. Full recipe after ≥2-week threshold (2026-05-29).
+- **NVIDIA RTX 2000 Ada** — ✅ promoted to Production 2026-08-09. In production since 2026-05-11 (PaddleOCR GPU inference); ≥2-week uptime threshold cleared 2026-05-25. Flag-set confirmed minimal (no hypervisor-hiding). Still unpublished, not blocking: ECC status and CUDA/NVENC benchmark numbers.
+- **NVIDIA RTX PRO 4500 Blackwell (32 GB GDDR7)** — ✅ promoted to Production 2026-08-09. In production since 2026-05-15 on the same workstation as the RTX 2000 Ada (Ollama VLM inference); ≥2-week uptime threshold cleared 2026-05-29. **Open findings that stay open**: WPR2 reset bug (host reboot required after VM stop — `vendor-reset` Blackwell support TBD); ReBAR on the full 32 GB BAR and PCIe 5.0 link training not yet verified under load.
 - **AMD (Polaris / Navi / RDNA)** — backlog; contingent on test hardware access and on `vendor-reset` kernel module compatibility with current kernels.
 
 ## Features
@@ -87,7 +87,7 @@ powershell.exe -File capability-probe.ps1
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Symptom-driven matrix — Code 43, MBDA fallback, WPR2 reset (Blackwell), open-module requirement (Ada/Blackwell) |
 | [docs/RESOURCE_MAPPINGS.md](docs/RESOURCE_MAPPINGS.md) | Cluster-aware passthrough via logical mapping names (Proxmox VE 8+); required for HA with passthrough |
 | [docs/vendors/intel-arc-dg2.md](docs/vendors/intel-arc-dg2.md) | ✅ Intel Arc A310 full recipe (Code-43-fix, INF gotcha) — production |
-| [docs/vendors/nvidia-professional.md](docs/vendors/nvidia-professional.md) | 🚧 RTX 2000 Ada + RTX PRO 4500 Blackwell — in validation (two Pro cards, same VM, dual-GPU confirmed) |
+| [docs/vendors/nvidia-professional.md](docs/vendors/nvidia-professional.md) | ✅ RTX 2000 Ada + RTX PRO 4500 Blackwell — production (two Pro cards, same VM, dual-GPU confirmed; open-module requirement, WPR2 reset bug) |
 | [docs/vendors/amd.md](docs/vendors/amd.md) | 📋 Reset Bug + `vendor-reset` kernel module — backlog |
 
 > The Consumer-tier perspective is covered by the **Intel Arc A310** entry. A NVIDIA-GeForce-specific stub for contributors lives at [docs/vendors/nvidia-consumer.md](docs/vendors/nvidia-consumer.md).

@@ -1,13 +1,16 @@
 # Example: NVIDIA RTX PRO 4500 Blackwell Passthrough
 
-Placeholder slot for the NVIDIA RTX PRO 4500 Blackwell (Professional / Workstation, Blackwell silicon, 32 GB GDDR7 ECC) passthrough recipe — will land here once the card has run an ML-inference workload for ≥2 weeks.
+Proxmox VM configuration for the NVIDIA RTX PRO 4500 Blackwell (Professional / Workstation, Blackwell silicon, 32 GB GDDR7 ECC) passed through to an Ubuntu 24.04 guest for ML inference.
 
-> **Status**: 🚧 **In validation** — hardware installed 2026-05-15, passthrough active, ≥2-week production uptime accumulating under real ML-inference (Ollama VLM, qwen3-vl:8b-instruct-q8_0).
-> Promotes to ✅ once the ≥2-week threshold ([CONTRIBUTING.md § 1](../../CONTRIBUTING.md#1-no-vendor-recipe-without-2-weeks-production)) is met.
+> **Status**: ✅ **Production** — promoted 2026-08-09. In production since 2026-05-15 under real ML inference (Ollama VLM, qwen3-vl:8b-instruct-q8_0); ≥2-week uptime threshold ([CONTRIBUTING.md § 1](../../CONTRIBUTING.md#1-no-vendor-recipe-without-2-weeks-production)) cleared 2026-05-29.
+>
+> **Read the WPR2 reset bug below before you rely on this in a stop/start workflow.** It is unfixed, and the only known workaround is a host reboot.
 
-## Why Still a Placeholder
+## What This Recipe Covers
 
-This repo's rule is **no vendor recipe without ≥2 weeks of production validation on real hardware** (see [CONTRIBUTING.md](../../CONTRIBUTING.md)). The first session (2026-05-15) confirmed the passthrough works and the config shape below is correct. The full recipe lands here once ≥2 weeks of ML-inference workload have elapsed.
+This repo's rule is **no vendor recipe without ≥2 weeks of production validation on real hardware** (see [CONTRIBUTING.md](../../CONTRIBUTING.md)). That threshold is met: the config below has been carrying an Ollama VLM workload continuously since 2026-05-15.
+
+What is confirmed and documented here: the mandatory open-kernel-module requirement, the config shape, PCI IDs of GPU and audio companion, the clean IOMMU group, the `vfio.conf` including the `snd_hda_intel` softdep, and the live-bind technique via `new_id`. Two Blackwell-specific measurements remain open — see *Open verification items* at the end; neither blocks the passthrough itself.
 
 ## ⚠️ Blackwell Critical: Open Kernel Modules Required
 
@@ -36,7 +39,7 @@ sudo modprobe nvidia
 
 This requirement applies to **all** Blackwell GPUs in Linux guests, not just Pro cards. The open kernel modules (`nvidia-open`) have been mandatory for Ada Lovelace and newer since NVIDIA deprecated proprietary modules for those architectures.
 
-See also: [TROUBLESHOOTING.md § nvidia-smi reports "No devices found"](../../docs/TROUBLESHOOTING.md#nvidia-smi-reports-no-devices-found-linux-guest-blackwell--ada).
+See also: [TROUBLESHOOTING.md § nvidia-smi reports "No devices found"](../../docs/TROUBLESHOOTING.md#nvidia-smi-reports-no-devices-found-linux-guest--blackwell--ada).
 
 ## Confirmed Config Shape
 
@@ -106,15 +109,26 @@ The PRO 4500 Blackwell sits at an unusual intersection:
 
 This makes it a **useful contrast** to both the Ada-Pro RTX 2000 (same driver branch, different silicon-era quirks) and the Consumer-Blackwell stub (same silicon, different driver branch).
 
-## What will be validated
+## Confirmed in production
 
-1. Clean driver install (NVIDIA RTX Enterprise branch — Linux for inference workload, or Windows for guest-side tooling)
-2. Full BAR exposed (`lspci -vv` shows 32 GB BAR, not truncated fallback)
-3. PCIe 5.0 x16 link width sustained under load (`lspci -vv` `LnkSta:`)
-4. ECC memory active (`nvidia-smi -q -d ECC`)
-5. CUDA compute (`nvcc` sample: deviceQuery, bandwidthTest)
-6. NVENC session capability (no Consumer per-process session cap on Pro cards)
-7. ≥2-week ML-inference workload — actual model serving (e.g. 13B–34B-class quantized LLM, larger transformer batches, multi-modal inference)
+1. Driver install on the NVIDIA RTX Enterprise branch — `nvidia-driver-595-server-open` (the **open** modules are mandatory, see above), CUDA 13.2, `nvidia-smi` working inside a Docker container via nvidia-container-toolkit 1.19.0
+2. Sustained ML-inference workload since 2026-05-15 — Ollama VLM serving (qwen3-vl:8b-instruct-q8_0, with qwen3-vl:32b-instruct-q4_K_M pre-loaded)
+3. Simultaneous operation with the RTX 2000 Ada in the same host, per-container GPU assignment via `NVIDIA_VISIBLE_DEVICES`
+4. Clean isolated IOMMU group on the AMD Granite Ridge platform — GPU + audio companion only
+
+## Open verification items
+
+These are unmeasured, not failed. They do not block the passthrough recipe, but a Blackwell card is exactly where they can bite:
+
+1. Full BAR exposed — `lspci -vv -s <BDF>` should show the whole 32 GB BAR, not a truncated 256 MB fallback
+2. PCIe 5.0 x16 link width sustained under load (`lspci -vv` `LnkSta:` during inference)
+3. ECC memory active (`nvidia-smi -q -d ECC`)
+4. CUDA compute benchmarks (`nvcc` sample: deviceQuery, bandwidthTest)
+5. NVENC session capability (no Consumer per-process session cap expected on Pro cards)
+
+## Known Open Defect
+
+The **WPR2 reset bug** is unfixed: the GPU does not survive a VM stop/start cycle without a full host reboot, because PCIe FLR does not reset the GSP firmware's WPR2 state. This hits on the *second* VM boot, not the first — a successful first boot is a false signal. Full write-up and the comparison against the AMD Reset Bug: [TROUBLESHOOTING.md § WPR2 Reset Bug](../../docs/TROUBLESHOOTING.md#nvidia-blackwell-gpu-failed-to-initialize-on-second-vm-start-wpr2-reset-bug). A `vendor-reset`-based long-term fix depends on Blackwell support landing in `gnif/vendor-reset`.
 
 ## Two-Card-One-Host Considerations
 
@@ -123,16 +137,16 @@ This card shares a workstation with the RTX 2000 Ada. See [../../docs/vendors/nv
 ## Tracking
 
 - Open issue with label `vendor:nvidia-pro-blackwell` when init / ReBAR / link-training issues encountered
-- Stub doc: [../../docs/vendors/nvidia-professional.md](../../docs/vendors/nvidia-professional.md)
+- Vendor doc: [../../docs/vendors/nvidia-professional.md](../../docs/vendors/nvidia-professional.md)
 
 ## See Also
 
 - [../intel-arc-a310/](../intel-arc-a310/) — Validated Intel Arc example (contrast: hypervisor-hiding required)
-- [../nvidia-rtx-2000-ada/](../nvidia-rtx-2000-ada/) — Sibling Ada-Pro placeholder (same Pro driver branch, older silicon)
+- [../nvidia-rtx-2000-ada/](../nvidia-rtx-2000-ada/) — Sibling Ada-Pro recipe (same Pro driver branch, older silicon)
 - [../nvidia-consumer-blackwell/](../nvidia-consumer-blackwell/) — Consumer-Blackwell stub (same silicon family, different driver branch)
-- [../../docs/vendors/nvidia-professional.md](../../docs/vendors/nvidia-professional.md) — Stub doc for both Pro cards
-- [../../CONTRIBUTING.md](../../CONTRIBUTING.md) — ≥2-week-uptime rule for promotion from Planned → Production
+- [../../docs/vendors/nvidia-professional.md](../../docs/vendors/nvidia-professional.md) — Vendor doc for both Pro cards
+- [../../CONTRIBUTING.md](../../CONTRIBUTING.md) — ≥2-week-uptime rule for promotion to Production
 
 ---
 
-*Contributors: if you run any RTX PRO Blackwell variant (PRO 4000 / 4500 / 5000 / 6000 Blackwell) in Proxmox passthrough and want to submit a recipe before this one is ready, see [CONTRIBUTING.md](../../CONTRIBUTING.md). Pro-Blackwell recipes are completely absent from open-source GPU-passthrough docs at this point.*
+*Contributors: if you run any other RTX PRO Blackwell variant (PRO 4000 / 5000 / 6000 Blackwell) in Proxmox passthrough, a recipe for your card is welcome — see [CONTRIBUTING.md](../../CONTRIBUTING.md). Pro-Blackwell recipes are close to absent from open-source GPU-passthrough docs.*

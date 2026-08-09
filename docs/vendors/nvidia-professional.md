@@ -1,10 +1,18 @@
 # NVIDIA Professional (RTX A / RTX Ada / RTX PRO Blackwell / Quadro)
 
-> 🚧 **Status**: In validation. Target hardware: **two Pro cards in one workstation** —
-> **RTX 2000 Ada Generation (16 GB GDDR6 ECC)** as the Ada-generation reference (installed 2026-05-11),
-> and **RTX PRO 4500 Blackwell (32 GB GDDR7)** as the Blackwell-generation reference (installed + passthrough active 2026-05-15).
-> Both targeted at ML-inference workload. Recipes promote from 🚧 to ✅ once each
-> card has cleared ≥2 weeks of production uptime per [CONTRIBUTING.md § 1](../../CONTRIBUTING.md#1-no-vendor-recipe-without-2-weeks-production).
+> ✅ **Status**: Production (promoted 2026-08-09). Hardware: **two Pro cards in one workstation** —
+> **RTX 2000 Ada Generation (16 GB GDDR6 ECC)** as the Ada-generation reference (in production since 2026-05-11, PaddleOCR GPU inference),
+> and **RTX PRO 4500 Blackwell (32 GB GDDR7)** as the Blackwell-generation reference (in production since 2026-05-15, Ollama VLM inference).
+> Both cleared the ≥2-week production-uptime threshold per [CONTRIBUTING.md § 1](../../CONTRIBUTING.md#1-no-vendor-recipe-without-2-weeks-production)
+> and run simultaneously on the same host with per-container GPU isolation.
+>
+> **What "Production" covers here**: the passthrough recipe — config shape, PCI IDs, IOMMU
+> placement, `vfio.conf`, the mandatory open-kernel-module requirement, and dual-GPU operation.
+> **What it does not cover**: two Blackwell-specific measurements that are still open —
+> ReBAR on the full 32 GB BAR and PCIe 5.0 link training under sustained load — plus the
+> **WPR2 reset bug**, which is a known, unfixed defect with a documented workaround
+> (host reboot). See the sections below before putting a Blackwell card into a workflow
+> that stops and starts VMs.
 
 ## Why Professional Cards Are Different
 
@@ -18,7 +26,7 @@ NVIDIA RTX Professional cards (formerly Quadro) are **explicitly marketed for vi
 
 For plain **PCIe passthrough** (not vGPU), the Pro cards are actually easier than Consumer ones because the driver fully expects virtualization. Most problems disappear.
 
-## Anticipated Recipe (Both Cards)
+## Recipe Pattern (Both Cards)
 
 ```
 Pattern D: Paravirt-tolerant (Layer 5)
@@ -88,25 +96,27 @@ NVRM: installed in this system requires use of the NVIDIA open kernel modules.
 NVRM: GPU 0000:02:00.0: RmInitAdapter failed! (0x22:0x56:1017)
 ```
 
-`nvidia-smi` reports `No devices found` even with the module loaded. Fix: install `nvidia-driver-XXX-server-open` (or `nvidia-driver-XXX-open` for non-server builds). See [TROUBLESHOOTING.md § nvidia-smi reports "No devices found"](../TROUBLESHOOTING.md#nvidia-smi-reports-no-devices-found-linux-guest-blackwell--ada).
+`nvidia-smi` reports `No devices found` even with the module loaded. Fix: install `nvidia-driver-XXX-server-open` (or `nvidia-driver-XXX-open` for non-server builds). See [TROUBLESHOOTING.md § nvidia-smi reports "No devices found"](../TROUBLESHOOTING.md#nvidia-smi-reports-no-devices-found-linux-guest--blackwell--ada).
 
-### Confirmed Quirks (Blackwell-Specific — still accumulating)
+### Blackwell-Specific Quirks
 
 - **Open kernel modules mandatory** — confirmed critical, see above.
 - **ReBAR on full 32 GB** — not yet verified; mainboard BIOS must map the full 32 GB BAR through the PCIe hierarchy; small-memory-map BIOSes silently fall back to 256 MB BAR with a massive perf hit. Verify with `lspci -vv -s <BDF>` showing the full BAR size, not the truncated fallback.
 - **PCIe 5.0 link training** — not yet verified under sustained load; host slot must negotiate full PCIe 5.0 x16; under heavy thermal load some host/board combos drop to PCIe 4.0 / 3.0. Check with `lspci -vv` `LnkSta:` during workload.
 - **GDDR7 ECC reporting** — not yet verified; `nvidia-smi -q -d ECC` should show ECC supported and active; default for Pro cards is usually enabled.
 
-## Anticipated Test Plan (per card)
+## Validation Path (per card) — what was done
 
-1. Install card in the workstation (both Pro cards live in the same chassis, separate IOMMU groups)
-2. Host prep per [HOST_SETUP.md](../HOST_SETUP.md) — no Pro-specific deviations expected
-3. VM config per [VM_CONFIG.md](../VM_CONFIG.md) — minimal args, no hypervisor hiding
-4. Install NVIDIA RTX Enterprise driver in Linux/Windows guest (depending on inference stack)
-5. Run capability probe — check CUDA compute, ECC status, full-BAR (Blackwell), full PCIe link width
-6. Run 2-week ML-inference workload (real model serving, not synthetic benchmark)
-7. Document any surprises — especially Blackwell-vs-Ada differences
-8. Update this doc from stub → full recipe per card; flip README table rows from 🚧 to ✅
+1. ✅ Install card in the workstation (both Pro cards live in the same chassis, separate IOMMU groups)
+2. ✅ Host prep per [HOST_SETUP.md](../HOST_SETUP.md) — no Pro-specific deviations needed, but the audio companion required an explicit `snd_hda_intel` unbind on both cards
+3. ✅ VM config per [VM_CONFIG.md](../VM_CONFIG.md) — minimal args, no hypervisor hiding
+4. ✅ Install NVIDIA RTX Enterprise driver in the Linux guest — **open kernel modules mandatory** on both Ada and Blackwell; this was the single biggest surprise of the whole exercise
+5. ⬜ Capability probe — CUDA compute, ECC status, full-BAR (Blackwell), full PCIe link width **not yet measured and published**
+6. ✅ ≥2-week ML-inference workload, real model serving (PaddleOCR on the Ada card, Ollama VLM on the Blackwell card)
+7. ✅ Document the surprises — open-module requirement (both cards), WPR2 reset bug (Blackwell only), `qm set` vs. `vfio.conf` independence, dual-GPU container isolation
+8. ✅ Promote both cards to ✅ Production (2026-08-09) and flip the README table rows
+
+Step 5 is the only one still open. It is a measurement gap, not a functional one — the passthrough itself is carrying production load on both cards.
 
 ## Two-Card-One-Host Considerations
 

@@ -9,8 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 - Extend `collect-diagnostics.sh` sanitizer to mask IPv4/IPv6, hardware/BIOS UUIDs, and usernames in paths — once enough real-world diag bundles surface the common patterns.
-- NVIDIA RTX 2000 Ada + RTX PRO 4500 Blackwell recipes (two Pro cards, same workstation, ML-inference workload — promote to ✅ after each clears its own ≥2-week threshold).
+- Publish the outstanding NVIDIA Pro measurements: ECC status (`nvidia-smi -q -d ECC`), CUDA/NVENC benchmarks (both cards), and — Blackwell-specific — full 32 GB BAR exposure and PCIe 5.0 link width under sustained load.
 - `vendor-reset` installation guide for Blackwell WPR2 reset bug — once Blackwell support in `gnif/vendor-reset` is confirmed.
+
+## [1.2.2] — 2026-08-09
+
+### Changed
+- **`README.md`, `docs/vendors/nvidia-professional.md`, `examples/nvidia-rtx-2000-ada/README.md`, `examples/nvidia-rtx-pro-4500-blackwell/README.md`: both NVIDIA Pro cards promoted 🚧 In validation → ✅ Production (2026-08-09).** RTX 2000 Ada has carried a PaddleOCR GPU-inference workload since 2026-05-11 (≥2-week threshold cleared 2026-05-25); RTX PRO 4500 Blackwell has carried an Ollama VLM workload since 2026-05-15 (threshold cleared 2026-05-29). Status updated in all five places per card: GPU table, roadmap, documentation table, vendor doc, example README.
+- `README.md` roadmap: removed the two target-promotion dates (2026-05-25, 2026-05-29), which had been in the past for eleven weeks while the entries still read "full recipe after threshold". Replaced by the actual production-since dates and the remaining open items.
+- `docs/vendors/nvidia-professional.md`: status block now states explicitly what "Production" covers here — passthrough recipe, PCI IDs, IOMMU placement, `vfio.conf`, mandatory open kernel modules, dual-GPU operation — and what it does not: the unpublished measurements, and the WPR2 reset bug as a known unfixed defect. "Anticipated Test Plan" replaced by a validation path marking step 5 (capability probe) as the one item still open.
+- `examples/nvidia-rtx-2000-ada/README.md`, `examples/nvidia-rtx-pro-4500-blackwell/README.md`: rewritten from placeholder framing ("will land here once…") to recipes. Each now separates *Confirmed in production* from *Open verification items*; the Blackwell example gained a dedicated "Known Open Defect" section for the WPR2 reset bug so the promotion does not bury it. The Ada example gained the open-kernel-module caveat, which applies to Ada Lovelace on the `595` branch and not only to Blackwell.
+
+### Fixed
+- **`examples/intel-arc-a310/README.md`: status still read 🚧 In validation with a promotion date of 2026-05-04**, while `README.md` and `docs/vendors/intel-arc-dg2.md` had said ✅ Production since v1.2.1. The fifth status location was missed in that release — the same class of omission v1.2.0 already recorded for the RTX PRO 4500. Now ✅ Production, promoted 2026-05-15.
+- `examples/nvidia-rtx-2000-ada/README.md`: dropped the stale "will share a host with the RTX PRO 4500 Blackwell once that card is installed" — the card was installed 2026-05-15 and simultaneous dual-GPU operation was already documented in v1.2.0.
+- **Three broken heading anchors** into `docs/TROUBLESHOOTING.md` § *nvidia-smi Reports "No devices found"* — in `docs/vendors/nvidia-professional.md`, `examples/nvidia-rtx-2000-ada/README.md` and `examples/nvidia-rtx-pro-4500-blackwell/README.md`. The heading contains an em dash (`Linux Guest — Blackwell / Ada`), which GitHub's slug algorithm collapses into a **double** hyphen (`…linux-guest--blackwell--ada`); the three links carried a single one. Only `README.md` had the correct form. The `markdown-links` CI job does not validate URL fragments, so CI stayed green over these.
+- `docs/HOST_SETUP.md`: vendor-doc list still marked `nvidia-professional.md` as 🚧.
 
 ## [1.2.1] — 2026-07-26
 

@@ -2,7 +2,7 @@
 
 Sanitized Proxmox VM configuration for an Intel Arc A310 (DG2) passed through to Windows 11 — including the `args:` line that defeats the driver's CPUID check (Error 43).
 
-> **Status**: 🚧 In validation — initial config verified 2026-04-20; promotes to ✅ on 2026-05-04 when the ≥2-week uptime threshold ([CONTRIBUTING.md § 1](../../CONTRIBUTING.md)) is met.
+> **Status**: ✅ Production — promoted 2026-05-15 after the ≥2-week uptime threshold ([CONTRIBUTING.md § 1](../../CONTRIBUTING.md#1-no-vendor-recipe-without-2-weeks-production)) was confirmed. Initial config verified 2026-04-20.
 
 ## What's in here
 
@@ -43,5 +43,5 @@ If you need any of those for your specific hardware, see the main [VM_CONFIG.md]
 - [../../docs/vendors/intel-arc-dg2.md](../../docs/vendors/intel-arc-dg2.md) — Full Arc A310 recipe (Code-43-Fix, INF gotcha, Vulkan ICD)
 - [../../docs/VM_CONFIG.md](../../docs/VM_CONFIG.md) — VM-side options (machine type, OVMF, hookscripts)
 - [../../docs/TROUBLESHOOTING.md](../../docs/TROUBLESHOOTING.md) — Symptom-driven matrix for all vendors
-- [../nvidia-rtx-2000-ada/](../nvidia-rtx-2000-ada/) · [../nvidia-rtx-pro-4500-blackwell/](../nvidia-rtx-pro-4500-blackwell/) — Planned sibling recipes (NVIDIA Pro: Ada + Blackwell, ML-inference workload)
+- [../nvidia-rtx-2000-ada/](../nvidia-rtx-2000-ada/) · [../nvidia-rtx-pro-4500-blackwell/](../nvidia-rtx-pro-4500-blackwell/) — Sibling Pro recipes in production (NVIDIA Pro: Ada + Blackwell, ML-inference workload)
 - [../nvidia-consumer-blackwell/](../nvidia-consumer-blackwell/) — Backlog stub for NVIDIA-GeForce-specific quirks (Consumer-tier passthrough is already demonstrated by *this* Arc A310 recipe)

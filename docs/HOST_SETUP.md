@@ -148,7 +148,7 @@ This installs a hookscript at `/var/lib/vz/snippets/` that writes the chosen res
 
 Host is now ready. See [VM_CONFIG.md](VM_CONFIG.md) for per-VM setup, or jump directly to the vendor-specific recipe:
 - [vendors/intel-arc-dg2.md](vendors/intel-arc-dg2.md) ✅ (also serves as the Consumer-tier reference)
-- [vendors/nvidia-professional.md](vendors/nvidia-professional.md) 🚧 (RTX 2000 Ada + RTX PRO 4500 Blackwell)
+- [vendors/nvidia-professional.md](vendors/nvidia-professional.md) ✅ (RTX 2000 Ada + RTX PRO 4500 Blackwell)
 - [vendors/amd.md](vendors/amd.md) 📋 (backlog)
 - [vendors/nvidia-consumer.md](vendors/nvidia-consumer.md) 📋 (contributor stub — Consumer-tier already covered by Intel Arc above)
 
